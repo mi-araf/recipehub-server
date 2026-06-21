@@ -11,6 +11,7 @@ import jwtAuthRoutes from "./routes/jwtAuth.routes.js";
 import recipeRoutes from "./routes/recipe.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import userRoutes from "./routes/user.routes.js";
+import optionalRoutes from "./routes/optional.routes.js";
 
 dotenv.config();
 
@@ -41,6 +42,7 @@ app.use("/api/jwt", jwtAuthRoutes);
 app.use("/api", recipeRoutes);
 app.use("/api", dashboardRoutes);
 app.use("/api", userRoutes);
+app.use("/api", optionalRoutes);
 
 app.use((req, res) => {
     res.status(404).json({
