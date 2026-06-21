@@ -28,14 +28,13 @@ app.use(
     })
 );
 
-// Better Auth route must stay before express.json()
 app.all("/api/auth/*splat", toNodeHandler(auth));
 
 app.use(cookieParser());
 app.use(express.json());
 
 app.get("/", (req, res) => {
-    res.send("RecipeHub server is running 🚀");
+    res.send("RecipeHub server is running");
 });
 
 app.use("/api/jwt", jwtAuthRoutes);

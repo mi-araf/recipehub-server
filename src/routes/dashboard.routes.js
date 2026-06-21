@@ -3,51 +3,41 @@ import mongoose from "mongoose";
 
 import Recipe from "../models/recipe.model.js";
 import Favorite from "../models/favorite.model.js";
-import Like from "../models/like.model.js";
-import Report from "../models/report.model.js";
 import User from "../models/user.model.js";
-import Payment from "../models/payment.model.js";
 import { verifyToken } from "../middlewares/verifyToken.js";
 
 const router = express.Router();
 
 const NORMAL_RECIPE_LIMIT = 2;
+
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
+
 const getEmail = (req) => req.user.email.toLowerCase();
 
 router.use("/dashboard", verifyToken);
 
+// Dashboard overview
 router.get("/dashboard/overview", async (req, res) => {
     try {
         const email = getEmail(req);
 
-        const [
-            user,
-            totalRecipes,
-            totalFavorites,
-            likesAggregation,
-            purchasedRecipes,
-            recentRecipes,
-        ] = await Promise.all([
-            User.findOne({ email }).select("-password"),
-            Recipe.countDocuments({ authorEmail: email }),
-            Favorite.countDocuments({ userEmail: email }),
-            Recipe.aggregate([
-                { $match: { authorEmail: email } },
-                { $group: { _id: null, totalLikes: { $sum: "$likesCount" } } },
-            ]),
-            Payment.countDocuments({ userEmail: email, paymentStatus: "paid", recipeId: { $ne: null } }),
-            Recipe.find({ authorEmail: email })
-                .sort({ createdAt: -1 })
-                .limit(4)
-                .select("recipeName recipeImage category likesCount status createdAt"),
-        ]);
+        const [user, totalRecipes, totalFavorites, likesAggregation, recentRecipes] =
+            await Promise.all([
+                User.findOne({ email }).select("-password"),
+                Recipe.countDocuments({ authorEmail: email }),
+                Favorite.countDocuments({ userEmail: email }),
+                Recipe.aggregate([
+                    { $match: { authorEmail: email } },
+                    { $group: { _id: null, totalLikes: { $sum: "$likesCount" } } },
+                ]),
+                Recipe.find({ authorEmail: email })
+                    .sort({ createdAt: -1 })
+                    .limit(4)
+                    .select("recipeName recipeImage category likesCount status createdAt"),
+            ]);
 
         const totalLikesReceived = likesAggregation[0]?.totalLikes || 0;
         const isPremium = Boolean(user?.isPremium);
-        const remainingRecipeSlots = isPremium
-            ? "Unlimited"
-            : Math.max(0, NORMAL_RECIPE_LIMIT - totalRecipes);
 
         res.status(200).json({
             success: true,
@@ -57,12 +47,14 @@ router.get("/dashboard/overview", async (req, res) => {
                     totalRecipes,
                     totalFavorites,
                     totalLikesReceived,
-                    purchasedRecipes,
+                    purchasedRecipes: 0,
                 },
                 limits: {
                     isPremium,
                     normalRecipeLimit: NORMAL_RECIPE_LIMIT,
-                    remainingRecipeSlots,
+                    remainingRecipeSlots: isPremium
+                        ? "Unlimited"
+                        : Math.max(0, NORMAL_RECIPE_LIMIT - totalRecipes),
                     canAddRecipe: isPremium || totalRecipes < NORMAL_RECIPE_LIMIT,
                 },
                 recentRecipes,
@@ -77,6 +69,7 @@ router.get("/dashboard/overview", async (req, res) => {
     }
 });
 
+// My recipes
 router.get("/dashboard/my-recipes", async (req, res) => {
     try {
         const recipes = await Recipe.find({ authorEmail: getEmail(req) })
@@ -99,12 +92,16 @@ router.get("/dashboard/my-recipes", async (req, res) => {
     }
 });
 
+// Single own recipe
 router.get("/dashboard/my-recipes/:id", async (req, res) => {
     try {
         const { id } = req.params;
 
         if (!isValidObjectId(id)) {
-            return res.status(400).json({ success: false, message: "Invalid recipe id" });
+            return res.status(400).json({
+                success: false,
+                message: "Invalid recipe id",
+            });
         }
 
         const recipe = await Recipe.findOne({
@@ -119,7 +116,10 @@ router.get("/dashboard/my-recipes/:id", async (req, res) => {
             });
         }
 
-        res.status(200).json({ success: true, data: recipe });
+        res.status(200).json({
+            success: true,
+            data: recipe,
+        });
     } catch (error) {
         res.status(500).json({
             success: false,
@@ -129,12 +129,16 @@ router.get("/dashboard/my-recipes/:id", async (req, res) => {
     }
 });
 
+// Update own recipe
 router.patch("/dashboard/my-recipes/:id", async (req, res) => {
     try {
         const { id } = req.params;
 
         if (!isValidObjectId(id)) {
-            return res.status(400).json({ success: false, message: "Invalid recipe id" });
+            return res.status(400).json({
+                success: false,
+                message: "Invalid recipe id",
+            });
         }
 
         const allowedFields = [
@@ -164,9 +168,15 @@ router.patch("/dashboard/my-recipes/:id", async (req, res) => {
         }
 
         const recipe = await Recipe.findOneAndUpdate(
-            { _id: id, authorEmail: getEmail(req) },
+            {
+                _id: id,
+                authorEmail: getEmail(req),
+            },
             updateData,
-            { new: true, runValidators: true }
+            {
+                new: true,
+                runValidators: true,
+            }
         );
 
         if (!recipe) {
@@ -190,12 +200,16 @@ router.patch("/dashboard/my-recipes/:id", async (req, res) => {
     }
 });
 
+// Delete own recipe
 router.delete("/dashboard/my-recipes/:id", async (req, res) => {
     try {
         const { id } = req.params;
 
         if (!isValidObjectId(id)) {
-            return res.status(400).json({ success: false, message: "Invalid recipe id" });
+            return res.status(400).json({
+                success: false,
+                message: "Invalid recipe id",
+            });
         }
 
         const recipe = await Recipe.findOneAndDelete({
@@ -210,11 +224,7 @@ router.delete("/dashboard/my-recipes/:id", async (req, res) => {
             });
         }
 
-        await Promise.all([
-            Favorite.deleteMany({ recipeId: id }),
-            Like.deleteMany({ recipeId: id }),
-            Report.deleteMany({ recipeId: id }),
-        ]);
+        await Favorite.deleteMany({ recipeId: id });
 
         res.status(200).json({
             success: true,
@@ -229,21 +239,36 @@ router.delete("/dashboard/my-recipes/:id", async (req, res) => {
     }
 });
 
+// Favorites
 router.get("/dashboard/favorites", async (req, res) => {
     try {
-        const favorites = await Favorite.find({ userEmail: getEmail(req) })
-            .sort({ addedAt: -1 })
-            .populate(
-                "recipeId",
-                "recipeName recipeImage category cuisineType difficultyLevel preparationTime likesCount authorName status"
-            );
+        const email = getEmail(req);
+
+        const favorites = await Favorite.find({ userEmail: email })
+            .sort({ addedAt: -1, createdAt: -1 })
+            .populate({
+                path: "recipeId",
+                select:
+                    "recipeName recipeImage category cuisineType difficultyLevel preparationTime likesCount authorName authorEmail status createdAt",
+            })
+            .lean();
 
         const recipes = favorites
-            .filter((item) => item.recipeId && item.recipeId.status === "active")
-            .map((item) => ({
-                favoriteId: item._id,
-                addedAt: item.addedAt,
-                ...item.recipeId.toObject(),
+            .filter((favorite) => favorite.recipeId)
+            .map((favorite) => ({
+                favoriteId: favorite._id,
+                addedAt: favorite.addedAt || favorite.createdAt,
+                _id: favorite.recipeId._id,
+                recipeName: favorite.recipeId.recipeName,
+                recipeImage: favorite.recipeId.recipeImage,
+                category: favorite.recipeId.category,
+                cuisineType: favorite.recipeId.cuisineType,
+                difficultyLevel: favorite.recipeId.difficultyLevel,
+                preparationTime: favorite.recipeId.preparationTime,
+                likesCount: favorite.recipeId.likesCount || 0,
+                authorName: favorite.recipeId.authorName,
+                authorEmail: favorite.recipeId.authorEmail,
+                status: favorite.recipeId.status || "active",
             }));
 
         res.status(200).json({
@@ -260,12 +285,16 @@ router.get("/dashboard/favorites", async (req, res) => {
     }
 });
 
+// Remove favorite
 router.delete("/dashboard/favorites/:recipeId", async (req, res) => {
     try {
         const { recipeId } = req.params;
 
         if (!isValidObjectId(recipeId)) {
-            return res.status(400).json({ success: false, message: "Invalid recipe id" });
+            return res.status(400).json({
+                success: false,
+                message: "Invalid recipe id",
+            });
         }
 
         await Favorite.deleteOne({
@@ -286,41 +315,13 @@ router.delete("/dashboard/favorites/:recipeId", async (req, res) => {
     }
 });
 
+// Purchased recipes placeholder for now
 router.get("/dashboard/purchased-recipes", async (req, res) => {
-    try {
-        const payments = await Payment.find({
-            userEmail: getEmail(req),
-            paymentStatus: "paid",
-            recipeId: { $ne: null },
-        })
-            .sort({ paidAt: -1 })
-            .populate(
-                "recipeId",
-                "recipeName recipeImage category cuisineType difficultyLevel preparationTime likesCount authorName status"
-            );
-
-        const recipes = payments
-            .filter((item) => item.recipeId && item.recipeId.status === "active")
-            .map((item) => ({
-                paymentId: item._id,
-                amount: item.amount,
-                transactionId: item.transactionId,
-                paidAt: item.paidAt,
-                ...item.recipeId.toObject(),
-            }));
-
-        res.status(200).json({
-            success: true,
-            count: recipes.length,
-            data: recipes,
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: "Failed to load purchased recipes",
-            error: error.message,
-        });
-    }
+    res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+    });
 });
 
 export default router;
