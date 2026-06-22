@@ -14,6 +14,7 @@ import userRoutes from "./routes/user.routes.js";
 import optionalRoutes from "./routes/optional.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
+import uploadRoutes from "./routes/upload.routes.js";
 
 dotenv.config();
 
@@ -48,6 +49,7 @@ app.use("/api", userRoutes);
 app.use("/api", optionalRoutes);
 app.use("/api", adminRoutes);
 app.use("/api", paymentRoutes);
+app.use("/api", uploadRoutes);
 
 app.use((req, res) => {
     res.status(404).json({
