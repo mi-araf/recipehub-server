@@ -9,7 +9,29 @@ import Payment from "../models/payment.model.js";
 
 const router = express.Router();
 
-const NORMAL_RECIPE_LIMIT = 2;
+const FREE_RECIPE_LIMIT = 2;
+const PLUS_RECIPE_LIMIT = 40;
+
+const getPlan = (user) => {
+    if (user?.role === "admin") return "admin";
+    if (user?.premiumPlan === "premium") return "premium";
+    if (user?.premiumPlan === "plus") return "plus";
+    return "free";
+};
+
+const getRecipeLimit = (plan) => {
+    if (plan === "admin") return "Unlimited";
+    if (plan === "premium") return "Unlimited";
+    if (plan === "plus") return PLUS_RECIPE_LIMIT;
+    return FREE_RECIPE_LIMIT;
+};
+
+const getPlanLabel = (plan) => {
+    if (plan === "admin") return "Admin";
+    if (plan === "premium") return "Premium Chef";
+    if (plan === "plus") return "Plus Chef";
+    return "Free Chef";
+};
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -29,7 +51,12 @@ router.get("/dashboard/overview", async (req, res) => {
                 Favorite.countDocuments({ userEmail: email }),
                 Recipe.aggregate([
                     { $match: { authorEmail: email } },
-                    { $group: { _id: null, totalLikes: { $sum: "$likesCount" } } },
+                    {
+                        $group: {
+                            _id: null,
+                            totalLikes: { $sum: "$likesCount" },
+                        },
+                    },
                 ]),
                 Recipe.find({ authorEmail: email })
                     .sort({ createdAt: -1 })
@@ -38,26 +65,43 @@ router.get("/dashboard/overview", async (req, res) => {
             ]);
 
         const totalLikesReceived = likesAggregation[0]?.totalLikes || 0;
-        const isPremium = Boolean(user?.isPremium);
+
+        const plan = getPlan(user);
+        const recipeLimit = getRecipeLimit(plan);
+        const isUnlimited = recipeLimit === "Unlimited";
 
         res.status(200).json({
             success: true,
             data: {
                 user,
+
                 stats: {
                     totalRecipes,
                     totalFavorites,
                     totalLikesReceived,
                     purchasedRecipes: 0,
                 },
-                limits: {
-                    isPremium,
-                    normalRecipeLimit: NORMAL_RECIPE_LIMIT,
-                    remainingRecipeSlots: isPremium
-                        ? "Unlimited"
-                        : Math.max(0, NORMAL_RECIPE_LIMIT - totalRecipes),
-                    canAddRecipe: isPremium || totalRecipes < NORMAL_RECIPE_LIMIT,
+
+                membership: {
+                    plan,
+                    label: getPlanLabel(plan),
+                    isPaidMember: plan === "plus" || plan === "premium",
+                    isPlus: plan === "plus",
+                    isPremium: plan === "premium",
                 },
+
+                limits: {
+                    plan,
+                    planLabel: getPlanLabel(plan),
+                    recipeLimit,
+                    freeRecipeLimit: FREE_RECIPE_LIMIT,
+                    plusRecipeLimit: PLUS_RECIPE_LIMIT,
+                    remainingRecipeSlots: isUnlimited
+                        ? "Unlimited"
+                        : Math.max(0, recipeLimit - totalRecipes),
+                    canAddRecipe: isUnlimited || totalRecipes < recipeLimit,
+                },
+
                 recentRecipes,
             },
         });
