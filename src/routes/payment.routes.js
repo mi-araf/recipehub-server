@@ -267,11 +267,13 @@ router.get("/payments/verify-session", verifyToken, async (req, res) => {
         );
 
         if (metadata.paymentType === "premium") {
+            const plan = metadata.plan === "plus" ? "plus" : "premium";
+
             await User.findOneAndUpdate(
                 { email },
                 {
                     isPremium: true,
-                    premiumPlan: metadata.plan || "premium",
+                    premiumPlan: plan,
                     premiumSince: new Date(),
                 },
                 { new: true }

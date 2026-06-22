@@ -164,21 +164,53 @@ router.post("/logout", (req, res) => {
 });
 
 router.get("/me", verifyToken, async (req, res) => {
-    const user = await User.findOne({
-        email: req.user.email,
-    }).select("-password");
+    try {
+        const email = req.user?.email?.toLowerCase();
 
-    if (!user) {
-        return res.status(404).json({
+        if (!email) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized",
+            });
+        }
+
+        const user = await User.findOne({ email }).select("-password");
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+            });
+        }
+
+        if (user.isBlocked) {
+            return res.status(403).json({
+                success: false,
+                message: "Your account is blocked",
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                image: user.image,
+                role: user.role || "user",
+                isBlocked: Boolean(user.isBlocked),
+                isPremium: Boolean(user.isPremium),
+                premiumPlan: user.premiumPlan || "free",
+                premiumSince: user.premiumSince || null,
+            },
+        });
+    } catch (error) {
+        res.status(500).json({
             success: false,
-            message: "User not found",
+            message: "Failed to load current user",
+            error: error.message,
         });
     }
-
-    res.status(200).json({
-        success: true,
-        data: user,
-    });
 });
 
 router.post("/google-sync", async (req, res) => {
