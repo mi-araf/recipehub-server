@@ -389,10 +389,23 @@ router.patch("/admin/recipes/:id/feature", async (req, res) => {
             });
         }
 
-        const recipe = await Recipe.findByIdAndUpdate(
-            id,
-            { isFeatured: Boolean(isFeatured) },
-            { new: true }
+        const nextFeaturedValue = Boolean(isFeatured);
+
+        const updateData = {
+            isFeatured: nextFeaturedValue,
+        };
+
+        // Home featured section only shows active recipes.
+        // So when admin features a recipe, make it active too.
+        if (nextFeaturedValue) {
+            updateData.status = "active";
+        }
+
+        const recipe = await Recipe.findByIdAndUpdate(id, updateData, {
+            new: true,
+            runValidators: true,
+        }).select(
+            "recipeName recipeImage category cuisineType difficultyLevel preparationTime authorName authorEmail likesCount isFeatured status createdAt updatedAt"
         );
 
         if (!recipe) {
@@ -405,8 +418,8 @@ router.patch("/admin/recipes/:id/feature", async (req, res) => {
         res.status(200).json({
             success: true,
             message: recipe.isFeatured
-                ? "Recipe added to featured"
-                : "Recipe removed from featured",
+                ? "Recipe added to featured section"
+                : "Recipe removed from featured section",
             data: recipe,
         });
     } catch (error) {
