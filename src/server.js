@@ -13,6 +13,7 @@ import dashboardRoutes from "./routes/dashboard.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import optionalRoutes from "./routes/optional.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
+import paymentRoutes from "./routes/payment.routes.js";
 
 dotenv.config();
 
@@ -46,6 +47,7 @@ app.use("/api", dashboardRoutes);
 app.use("/api", userRoutes);
 app.use("/api", optionalRoutes);
 app.use("/api", adminRoutes);
+app.use("/api", paymentRoutes);
 
 app.use((req, res) => {
     res.status(404).json({

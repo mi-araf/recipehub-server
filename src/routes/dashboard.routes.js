@@ -5,6 +5,7 @@ import Recipe from "../models/recipe.model.js";
 import Favorite from "../models/favorite.model.js";
 import User from "../models/user.model.js";
 import { verifyToken } from "../middlewares/verifyToken.js";
+import Payment from "../models/payment.model.js";
 
 const router = express.Router();
 
@@ -315,13 +316,56 @@ router.delete("/dashboard/favorites/:recipeId", async (req, res) => {
     }
 });
 
-// Purchased recipes placeholder for now
 router.get("/dashboard/purchased-recipes", async (req, res) => {
-    res.status(200).json({
-        success: true,
-        count: 0,
-        data: [],
-    });
+    try {
+        const email = getEmail(req);
+
+        const payments = await Payment.find({
+            userEmail: email,
+            paymentType: "recipe",
+            paymentStatus: "paid",
+            recipeId: { $ne: null },
+        })
+            .sort({ paidAt: -1, createdAt: -1 })
+            .populate(
+                "recipeId",
+                "recipeName recipeImage category cuisineType difficultyLevel preparationTime likesCount authorName authorEmail status"
+            )
+            .lean();
+
+        const recipes = payments
+            .filter((payment) => payment.recipeId)
+            .map((payment) => ({
+                paymentId: payment._id,
+                amount: payment.amount,
+                currency: payment.currency,
+                transactionId: payment.transactionId,
+                paidAt: payment.paidAt,
+                _id: payment.recipeId._id,
+                recipeName: payment.recipeId.recipeName,
+                recipeImage: payment.recipeId.recipeImage,
+                category: payment.recipeId.category,
+                cuisineType: payment.recipeId.cuisineType,
+                difficultyLevel: payment.recipeId.difficultyLevel,
+                preparationTime: payment.recipeId.preparationTime,
+                likesCount: payment.recipeId.likesCount || 0,
+                authorName: payment.recipeId.authorName,
+                authorEmail: payment.recipeId.authorEmail,
+                status: payment.recipeId.status || "active",
+            }));
+
+        res.status(200).json({
+            success: true,
+            count: recipes.length,
+            data: recipes,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Failed to load purchased recipes",
+            error: error.message,
+        });
+    }
 });
 
 export default router;
