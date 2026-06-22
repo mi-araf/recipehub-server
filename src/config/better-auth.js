@@ -14,20 +14,23 @@ await client.connect();
 
 const db = client.db();
 
+const trustedOrigins = [
+    process.env.CLIENT_URL,
+    "http://localhost:3000",
+    "http://localhost:5000",
+    "https://recipehub-client-araf.vercel.app",
+].filter(Boolean);
+
 export const auth = betterAuth({
-    baseURL: "http://localhost:5000",
+    baseURL: process.env.BETTER_AUTH_URL,
     basePath: "/api/auth",
     secret: process.env.BETTER_AUTH_SECRET,
-
-    trustedOrigins: ["http://localhost:3000"],
-
+    trustedOrigins,
     database: mongodbAdapter(db),
-
     socialProviders: {
         google: {
             clientId: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            prompt: "select_account",
         },
     },
 });
