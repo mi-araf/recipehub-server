@@ -44,25 +44,62 @@ router.get("/dashboard/overview", async (req, res) => {
     try {
         const email = getEmail(req);
 
-        const [user, totalRecipes, totalFavorites, likesAggregation, recentRecipes] =
-            await Promise.all([
-                User.findOne({ email }).select("-password"),
-                Recipe.countDocuments({ authorEmail: email }),
-                Favorite.countDocuments({ userEmail: email }),
-                Recipe.aggregate([
-                    { $match: { authorEmail: email } },
-                    {
-                        $group: {
-                            _id: null,
-                            totalLikes: { $sum: "$likesCount" },
-                        },
+        const [
+            user,
+            totalRecipes,
+            validFavoritesAggregation,
+            likesAggregation,
+            recentRecipes,
+        ] = await Promise.all([
+            User.findOne({ email }).select("-password"),
+
+            Recipe.countDocuments({ authorEmail: email }),
+
+            Favorite.aggregate([
+                {
+                    $match: {
+                        userEmail: email,
                     },
-                ]),
-                Recipe.find({ authorEmail: email })
-                    .sort({ createdAt: -1 })
-                    .limit(4)
-                    .select("recipeName recipeImage category likesCount status createdAt"),
-            ]);
+                },
+                {
+                    $lookup: {
+                        from: "recipes",
+                        localField: "recipeId",
+                        foreignField: "_id",
+                        as: "recipe",
+                    },
+                },
+                {
+                    $unwind: "$recipe",
+                },
+                {
+                    $match: {
+                        "recipe.status": "active",
+                    },
+                },
+                {
+                    $count: "totalFavorites",
+                },
+            ]),
+
+            Recipe.aggregate([
+                { $match: { authorEmail: email } },
+                {
+                    $group: {
+                        _id: null,
+                        totalLikes: { $sum: "$likesCount" },
+                    },
+                },
+            ]),
+
+            Recipe.find({ authorEmail: email })
+                .sort({ createdAt: -1 })
+                .limit(4)
+                .select("recipeName recipeImage category likesCount status createdAt"),
+        ]);
+
+        const totalFavorites =
+            validFavoritesAggregation[0]?.totalFavorites || 0;
 
         const totalLikesReceived = likesAggregation[0]?.totalLikes || 0;
 
@@ -298,9 +335,10 @@ router.get("/dashboard/favorites", async (req, res) => {
             })
             .lean();
 
-        const recipes = favorites
-            .filter((favorite) => favorite.recipeId)
-            .map((favorite) => ({
+        const recipes = favorites.filter(
+                (favorite) =>
+                    favorite.recipeId && favorite.recipeId.status === "active"
+            ).map((favorite) => ({
                 favoriteId: favorite._id,
                 addedAt: favorite.addedAt || favorite.createdAt,
                 _id: favorite.recipeId._id,
