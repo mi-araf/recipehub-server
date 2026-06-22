@@ -17,6 +17,7 @@ const db = client.db();
 const trustedOrigins = [
     process.env.CLIENT_URL,
     "https://recipehub-client-araf.vercel.app",
+    "https://recipehub-server-araf.vercel.app",
     "http://localhost:3000",
     "http://localhost:5000",
 ].filter(Boolean);
