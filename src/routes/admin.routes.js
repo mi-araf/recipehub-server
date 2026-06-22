@@ -584,23 +584,52 @@ router.delete("/admin/reports/:id/remove-recipe", async (req, res) => {
             });
         }
 
-        if (report.recipeId) {
-            await Promise.all([
-                Recipe.findByIdAndDelete(report.recipeId),
-                Favorite.deleteMany({ recipeId: report.recipeId }),
-                Like.deleteMany({ recipeId: report.recipeId }),
-                Bookmark.deleteMany({ recipeId: report.recipeId }),
-                Rating.deleteMany({ recipeId: report.recipeId }),
-            ]);
+        const recipeId = report.recipeId;
+
+        if (!recipeId) {
+            report.status = "removed";
+            await report.save();
+
+            return res.status(200).json({
+                success: true,
+                message: "Report marked as removed",
+            });
         }
 
-        report.status = "resolved";
-        report.adminNote = "Recipe removed by admin";
-        await report.save();
+        const recipe = await Recipe.findById(recipeId);
+
+        // If recipe is already deleted, just mark all reports for this recipe as removed.
+        if (!recipe) {
+            await Report.updateMany(
+                { recipeId },
+                {
+                    status: "removed",
+                }
+            );
+
+            return res.status(200).json({
+                success: true,
+                message: "Recipe was already removed. Reports updated.",
+            });
+        }
+
+        await Promise.all([
+            Recipe.findByIdAndDelete(recipeId),
+            Favorite.deleteMany({ recipeId }),
+            Like.deleteMany({ recipeId }),
+            Bookmark.deleteMany({ recipeId }),
+            Rating.deleteMany({ recipeId }),
+            Report.updateMany(
+                { recipeId },
+                {
+                    status: "removed",
+                }
+            ),
+        ]);
 
         res.status(200).json({
             success: true,
-            message: "Reported recipe removed",
+            message: "Reported recipe removed successfully",
         });
     } catch (error) {
         res.status(500).json({
